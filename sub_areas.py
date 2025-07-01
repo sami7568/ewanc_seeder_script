@@ -3,24 +3,12 @@ from sqlalchemy import create_engine
 
 # ✅ Step 4.1: DB config - CHANGE THESE!
 DB_CONFIG = {
-    # "host": "localhost",           # or your IP / domain
-    # "user": "sami",
-    # "password": "password",
-    # "database": "ewanc",
-    # "port": 3306
-    "host": "172.31.5.2",
-    "user": "root",
-    "password": "Pass@2323",
-    "database": "prod_ewanc_rds",
+    "host": "localhost",  # or your IP / domain
+    "user": "sami",
+    "password": "password",
+    "database": "ewanc",
     "port": 3306,
 }
-
-# DB_CONNECTION=mysql
-# DB_HOST="172.31.5.2"
-# DB_PORT=3306
-# DB_DATABASE="prod_ewanc_rds"
-# DB_USERNAME="root"
-# DB_PASSWORD="Pass@2323"
 
 # ✅ Step 4.2: SQLAlchemy DB connection
 connection_string = f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"

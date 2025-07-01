@@ -3,16 +3,11 @@ from sqlalchemy import create_engine, text
 
 # ✅ Step 4.1: DB config - CHANGE THESE!
 DB_CONFIG = {
-    # "host": "localhost",  # or your IP / domain
-    # "user": "sami",
-    # "password": "password",
-    # "database": "ewanc",
-    # "port": 3306,  # default MySQL port
-    "host": "172.31.5.2",
-    "user": "root",
-    "password": "Pass@2323",
-    "database": "prod_ewanc_rds",
-    "port": 3306,  # default MySQL port
+    "host": "localhost",  # or your IP / domain
+    "user": "sami",
+    "password": "password",
+    "database": "ewanc",
+    "port": 3306,  # default MySQL port# default MySQL port
 }
 
 # ✅ Step 4.2: SQLAlchemy DB connection
@@ -26,8 +21,17 @@ TABLE_NAME = "neighbourhoods"  # Change to your actual DB table name
 # ✅ Step 4.4: Seed in CHUNKS to avoid memory crash
 CHUNK_SIZE = 1000
 
+# Get valid sub_area_ids from database
+def get_valid_sub_area_ids():
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT id FROM sub_areas"))
+        return set(row[0] for row in result.fetchall())
 
 def seed_data():
+    # Get valid sub_area_ids once before processing chunks
+    valid_sub_area_ids = get_valid_sub_area_ids()
+    print(f"Found {len(valid_sub_area_ids)} valid sub_area_ids")
+
     for chunk in pd.read_csv(FILE_PATH, chunksize=CHUNK_SIZE):
         # Drop any unnamed columns that might exist
         chunk = chunk.loc[:, ~chunk.columns.str.contains("^Unnamed")]
@@ -80,8 +84,8 @@ def seed_data():
         column_mapping = {
             "nameAr": "name_ar",
             "nameEn": "name_en",
+            "CityId": "city_id",  # Map CityId from CSV to city_id in database
             # sub_area_id column already exists and correctly named in CSV
-            # CityId column will be ignored since neighbourhoods table doesn't have city_id
         }
 
         # Rename columns if they exist in the chunk
@@ -89,7 +93,19 @@ def seed_data():
             if csv_col in chunk.columns and db_col not in chunk.columns:
                 chunk = chunk.rename(columns={csv_col: db_col})
 
-        # sub_area_id and city_id will be populated from CSV data via column mapping
+        # Handle sub_area_id - ensure it exists in sub_areas table
+        if "sub_area_id" in chunk.columns:
+            chunk["sub_area_id"] = pd.to_numeric(chunk["sub_area_id"], errors="coerce")
+            # Only keep rows where sub_area_id exists in sub_areas table
+            chunk = chunk[chunk["sub_area_id"].isin(valid_sub_area_ids)]
+            if len(chunk) == 0:
+                print("⚠️ No valid sub_area_ids in this chunk, skipping...")
+                continue
+
+        # Handle city_id directly from the CSV (mapped from CityId)
+        if "city_id" in chunk.columns:
+            chunk["city_id"] = pd.to_numeric(chunk["city_id"], errors="coerce")
+            chunk["city_id"] = chunk["city_id"].fillna(0).astype(int)
 
         # Filter chunk to only include existing columns
         available_columns = [col for col in expected_columns if col in chunk.columns]
@@ -188,48 +204,7 @@ def seed_data():
         if "sub_area_id" in chunk.columns:
             # Handle sub_area_id as foreign key to sub_areas table
             chunk["sub_area_id"] = pd.to_numeric(chunk["sub_area_id"], errors="coerce")
-
-            # Validate against actual sub_areas table - only keep valid IDs
-            # Get valid sub_area_ids from database (cached for performance)
-            if not hasattr(seed_data, "_valid_sub_area_ids"):
-                with engine.connect() as conn:
-                    result = conn.execute(text("SELECT id FROM sub_areas"))
-                    seed_data._valid_sub_area_ids = set(
-                        row[0] for row in result.fetchall()
-                    )
-
-            # Only keep sub_area_ids that exist in the database, set others to None
-            def validate_sub_area_id(x):
-                if pd.notna(x) and int(x) in seed_data._valid_sub_area_ids:
-                    return int(x)
-                return None
-
-            chunk["sub_area_id"] = chunk["sub_area_id"].apply(validate_sub_area_id)
-
-        # Handle city_id column - populate from sub_areas.city_id based on sub_area_id
-        # Initialize city_id column
-        chunk["city_id"] = None
-
-        # Get city_id mapping from sub_areas table (cached for performance)
-        if not hasattr(seed_data, "_sub_area_to_city_mapping"):
-            with engine.connect() as conn:
-                result = conn.execute(
-                    text("SELECT id, city_id FROM sub_areas WHERE city_id IS NOT NULL")
-                )
-                seed_data._sub_area_to_city_mapping = dict(result.fetchall())
-
-        # Map city_id based on sub_area_id if sub_area_id exists
-        if "sub_area_id" in chunk.columns:
-
-            def get_city_id_for_sub_area(sub_area_id):
-                if (
-                    pd.notna(sub_area_id)
-                    and int(sub_area_id) in seed_data._sub_area_to_city_mapping
-                ):
-                    return seed_data._sub_area_to_city_mapping[int(sub_area_id)]
-                return None
-
-            chunk["city_id"] = chunk["sub_area_id"].apply(get_city_id_for_sub_area)
+            chunk["sub_area_id"] = chunk["sub_area_id"].fillna(0).astype(int)  # Convert NaN to 0
 
         # Handle other numeric columns that might exist in neighbourhoods (excluding foreign keys)
         numeric_columns = [
@@ -294,8 +269,9 @@ def seed_data():
                 ]:
                     chunk[col] = chunk[col].str[:50]  # Limit to 50 chars
 
-        chunk.to_sql(TABLE_NAME, con=engine, if_exists="append", index=False)
-        print(f"✅ Inserted {len(chunk)} rows")
+        if len(chunk) > 0:
+            chunk.to_sql(TABLE_NAME, con=engine, if_exists="append", index=False)
+            print(f"✅ Inserted {len(chunk)} rows")
 
     print("🎉 District seeding completed!")
 
