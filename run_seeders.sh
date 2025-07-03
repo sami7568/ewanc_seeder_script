@@ -1,0 +1,2 @@
+python3 seed_sub_areas.py
+python3 seed_sub_area_neighbourhoods.py

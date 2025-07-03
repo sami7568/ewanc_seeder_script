@@ -1,5 +1,6 @@
 import pandas as pd
 from sqlalchemy import create_engine
+from sqlalchemy.sql import text
 
 # ✅ Step 4.1: DB config - CHANGE THESE!
 DB_CONFIG = {
@@ -7,7 +8,7 @@ DB_CONFIG = {
     "user": "sami",
     "password": "password",
     "database": "ewanc",
-    "port": 3306,
+    "port": 3306  # default MySQL port
 }
 
 # ✅ Step 4.2: SQLAlchemy DB connection
@@ -186,5 +187,21 @@ def seed_data():
     print("🎉 Seeding completed!")
 
 
+def check_data():
+    with engine.connect() as conn:
+        # Check sub_areas count
+        result = conn.execute(text("SELECT COUNT(*) FROM sub_areas"))
+        count = result.scalar()
+        print(f"\n✅ sub_areas table has {count:,} rows")
+        
+        # Get sample of recent entries
+        result = conn.execute(text("SELECT id, name_ar, name_en, city_id FROM sub_areas ORDER BY id DESC LIMIT 3"))
+        rows = result.fetchall()
+        print("\n📊 Recent entries:")
+        for row in rows:
+            print(f"ID: {row[0]}, Name AR: {row[1]}, Name EN: {row[2]}, City ID: {row[3]}")
+
+
 if __name__ == "__main__":
     seed_data()
+    check_data()

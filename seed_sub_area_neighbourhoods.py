@@ -7,7 +7,7 @@ DB_CONFIG = {
     "user": "sami",
     "password": "password",
     "database": "ewanc",
-    "port": 3306,  # default MySQL port# default MySQL port
+    "port": 3306  # default MySQL port
 }
 
 # ✅ Step 4.2: SQLAlchemy DB connection
@@ -275,6 +275,20 @@ def seed_data():
 
     print("🎉 District seeding completed!")
 
+def check_data():
+    with engine.connect() as conn:
+        # Check neighbourhoods count
+        result = conn.execute(text("SELECT COUNT(*) FROM neighbourhoods"))
+        count = result.scalar()
+        print(f"\n✅ neighbourhoods table has {count:,} rows")
+        
+        # Get sample of recent entries
+        result = conn.execute(text("SELECT id, name_ar, name_en, sub_area_id, city_id FROM neighbourhoods ORDER BY id DESC LIMIT 3"))
+        rows = result.fetchall()
+        print("\n📊 Recent entries:")
+        for row in rows:
+            print(f"ID: {row[0]}, Name AR: {row[1]}, Name EN: {row[2]}, Sub Area ID: {row[3]}, City ID: {row[4]}")
 
 if __name__ == "__main__":
     seed_data()
+    check_data()
